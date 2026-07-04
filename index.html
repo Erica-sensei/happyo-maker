@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>はっぴょうメーカー</title>
+<style>
+  :root{
+    --orange:#FF9800; --green:#4CAF50; --blue:#2196F3; --purple:#9C27B0;
+    --pink:#E91E63; --teal:#009688; --red:#F44336;
+    --bg:#FFF3E0;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ height:100%; margin:0; }
+  body{
+    font-family:"Hiragino Maru Gothic ProN","ヒラギノ丸ゴ ProN W4","BIZ UDGothic","Yu Gothic",sans-serif;
+    background:var(--bg); display:flex; flex-direction:column; overflow:hidden;
+    touch-action:manipulation;
+  }
+  button{ font-family:inherit; cursor:pointer; border:none; }
+
+  /* ===== トップバー ===== */
+  #topbar{
+    display:flex; align-items:center; gap:8px; padding:8px 12px;
+    background:linear-gradient(90deg,#FFB74D,#FFD54F); box-shadow:0 2px 6px rgba(0,0,0,.15);
+    flex-wrap:wrap; z-index:20;
+  }
+  #topbar h1{ font-size:20px; margin:0 8px 0 0; color:#5D4037; white-space:nowrap; }
+  .tbtn{
+    font-size:15px; font-weight:bold; padding:9px 14px; border-radius:12px;
+    background:#fff; color:#5D4037; box-shadow:0 2px 0 rgba(0,0,0,.15);
+  }
+  .tbtn:active{ transform:translateY(2px); box-shadow:none; }
+  .tbtn.primary{ background:var(--red); color:#fff; font-size:16px; }
+  #topbar .spacer{ flex:1; }
+
+  /* ===== レイアウト ===== */
+  #main{ flex:1; display:flex; min-height:0; }
+
+  /* スライドいちらん */
+  #sidebar{
+    width:180px; background:#FFF8E1; border-right:3px solid #FFE0B2;
+    display:flex; flex-direction:column; padding:8px; gap:8px; overflow-y:auto;
+  }
+  .thumb{
+    position:relative; border:3px solid #FFCC80; border-radius:10px; background:#fff;
+    cursor:pointer; flex-shrink:0; overflow:hidden;
+  }
+  .thumb.sel{ border-color:var(--red); box-shadow:0 0 0 3px rgba(244,67,54,.3); }
+  .thumb .tstage{ width:150px; height:84px; overflow:hidden; position:relative; pointer-events:none; }
+  .thumb .tnum{
+    position:absolute; top:2px; left:2px; background:rgba(93,64,55,.8); color:#fff;
+    font-size:11px; font-weight:bold; border-radius:8px; padding:1px 7px; z-index:5;
+  }
+  .thumb .tctrl{ display:flex; justify-content:space-around; background:#FFF3E0; padding:2px; }
+  .thumb .tctrl button{ background:none; font-size:15px; padding:2px 6px; border-radius:6px; }
+  .thumb .tctrl button:active{ background:#FFE0B2; }
+  #addSlideBtn{
+    flex-shrink:0; font-size:15px; font-weight:bold; padding:12px 6px; border-radius:12px;
+    background:var(--green); color:#fff; box-shadow:0 3px 0 #388E3C;
+  }
+  #addSlideBtn:active{ transform:translateY(3px); box-shadow:none; }
+
+  /* へんしゅうエリア */
+  #editArea{ flex:1; display:flex; flex-direction:column; min-width:0; }
+  #toolbar{
+    display:flex; align-items:center; gap:10px; padding:8px 12px; flex-wrap:wrap;
+    background:#FFECB3; border-bottom:2px solid #FFE082; min-height:52px;
+  }
+  .toolLabel{ font-size:13px; font-weight:bold; color:#795548; }
+  .swatch{
+    width:32px; height:32px; border-radius:50%; border:3px solid #fff;
+    box-shadow:0 1px 3px rgba(0,0,0,.3); padding:0;
+  }
+  .swatch.sel{ border-color:var(--red); }
+  .toolbtn{
+    font-size:14px; font-weight:bold; padding:8px 12px; border-radius:10px;
+    background:#fff; color:#5D4037; box-shadow:0 2px 0 rgba(0,0,0,.12);
+  }
+  .toolbtn:active{ transform:translateY(2px); box-shadow:none; }
+  .toolbtn.mic.rec{ background:var(--red); color:#fff; animation:pulse 1s infinite; }
+  @keyframes pulse{ 50%{ opacity:.6; } }
+  #stampTools{ display:none; align-items:center; gap:6px; background:#FFF9C4; border-radius:10px; padding:4px 8px; }
+  #stampTools.show{ display:flex; }
+
+  #stage{ flex:1; display:flex; align-items:center; justify-content:center; min-height:0; padding:14px; }
+  #slideHolder{ position:relative; box-shadow:0 6px 24px rgba(0,0,0,.25); border-radius:8px; }
+
+  /* ===== スライド本体(960x540こてい) ===== */
+  .slide{
+    width:960px; height:540px; position:absolute; top:0; left:0;
+    transform-origin:top left; overflow:hidden; border-radius:8px;
+  }
+  .box{ position:absolute; }
+  .tx{
+    white-space:pre-wrap; word-break:break-word; outline:none; border-radius:14px;
+    line-height:1.45; overflow:hidden;
+  }
+  .slide.editable .tx{ border:3px dashed rgba(0,0,0,.18); }
+  .slide.editable .tx:focus{ border:3px solid var(--blue); background:rgba(255,255,255,.75); }
+  .tx:empty::before{ content:attr(data-ph); color:#b5aca4; }
+  .band{
+    color:#fff; font-weight:bold; display:flex; align-items:center; justify-content:center;
+    border-radius:16px; box-shadow:0 3px 0 rgba(0,0,0,.15);
+  }
+  .rowbadge{
+    position:absolute; display:flex; align-items:center; justify-content:center;
+    font-weight:bold; color:#fff; border-radius:50%;
+  }
+  .rowbg{ position:absolute; border-radius:16px; }
+  .photo{
+    position:absolute; border-radius:14px; display:flex; align-items:center; justify-content:center;
+    flex-direction:column; overflow:hidden; background:rgba(255,255,255,.6);
+  }
+  .slide.editable .photo{ border:3px dashed #90A4AE; cursor:pointer; }
+  .photo img{ width:100%; height:100%; object-fit:cover; }
+  .photo .phEmpty{ color:#78909C; font-weight:bold; text-align:center; font-size:24px; line-height:1.4; pointer-events:none; }
+  .photo .phX{
+    position:absolute; top:6px; right:6px; width:34px; height:34px; border-radius:50%;
+    background:rgba(244,67,54,.9); color:#fff; font-size:18px; font-weight:bold; display:none;
+  }
+  .slide.editable .photo:hover .phX, .slide.editable .photo .phX{ display:block; }
+  .stamp{ position:absolute; user-select:none; line-height:1; cursor:grab; }
+  .slide.editable .stamp.sel{ outline:3px dashed var(--red); outline-offset:4px; border-radius:8px; }
+
+  /* ===== テンプレえらび ===== */
+  .modalWrap{
+    position:fixed; inset:0; background:rgba(0,0,0,.45); display:none;
+    align-items:center; justify-content:center; z-index:50; padding:20px;
+  }
+  .modalWrap.show{ display:flex; }
+  .modal{
+    background:#FFF8E1; border-radius:20px; padding:20px; max-width:720px; width:100%;
+    max-height:90%; overflow-y:auto; box-shadow:0 10px 40px rgba(0,0,0,.35);
+  }
+  .modal h2{ margin:0 0 14px; color:#5D4037; font-size:20px; text-align:center; }
+  #tplGrid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; }
+  .tplCard{
+    background:#fff; border:3px solid #FFCC80; border-radius:14px; padding:12px 8px;
+    font-size:16px; font-weight:bold; color:#5D4037; text-align:center;
+  }
+  .tplCard:active{ background:#FFF3E0; }
+  .tplCard .big{ font-size:34px; display:block; margin-bottom:6px; }
+  .modal .close{ display:block; margin:16px auto 0; font-size:15px; font-weight:bold; padding:10px 24px; border-radius:12px; background:#BDBDBD; color:#fff; }
+  #stampGrid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(64px,1fr)); gap:8px; }
+  .stampChoice{ font-size:38px; background:#fff; border-radius:12px; padding:8px 4px; }
+  .stampChoice:active{ background:#FFF3E0; }
+
+  /* ===== はっぴょうモード ===== */
+  #present{
+    position:fixed; inset:0; background:#263238; display:none; z-index:100;
+    align-items:center; justify-content:center;
+  }
+  #present.show{ display:flex; }
+  #pHolder{ position:relative; }
+  .pnav{
+    position:fixed; top:50%; transform:translateY(-50%); font-size:34px; width:64px; height:64px;
+    border-radius:50%; background:rgba(255,255,255,.85); color:#37474F; z-index:110; font-weight:bold;
+  }
+  #pPrev{ left:14px; } #pNext{ right:14px; }
+  #pClose{
+    position:fixed; top:12px; right:14px; font-size:20px; font-weight:bold; z-index:110;
+    background:rgba(255,255,255,.85); border-radius:12px; padding:10px 16px; color:#37474F;
+  }
+  #pDots{
+    position:fixed; bottom:14px; left:0; right:0; text-align:center; z-index:110;
+    color:#fff; font-size:18px; font-weight:bold; text-shadow:0 1px 3px #000;
+  }
+
+  #fileInput,#loadInput{ display:none; }
+
+  @media (max-width:700px){
+    #sidebar{ width:120px; }
+    .thumb .tstage{ width:96px; height:54px; }
+    #topbar h1{ font-size:16px; }
+    .tbtn{ font-size:13px; padding:7px 9px; }
+  }
+</style>
+</head>
+<body>
+
+<header id="topbar">
+  <h1>🐞 はっぴょうメーカー</h1>
+  <button class="tbtn primary" id="presentBtn">▶ はっぴょうする</button>
+  <span class="spacer"></span>
+  <button class="tbtn" id="sampleBtn">🐛 おてほん</button>
+  <button class="tbtn" id="saveBtn">💾 ほぞん</button>
+  <button class="tbtn" id="openBtn">📂 ひらく</button>
+</header>
+
+<div id="main">
+  <aside id="sidebar">
+    <div id="thumbList" style="display:flex;flex-direction:column;gap:8px;"></div>
+    <button id="addSlideBtn">＋ スライドを<br>ふやす</button>
+  </aside>
+
+  <section id="editArea">
+    <div id="toolbar">
+      <span class="toolLabel">いろ:</span>
+      <span id="palette"></span>
+      <button class="toolbtn" id="stampBtn">😊 スタンプ</button>
+      <button class="toolbtn mic" id="micBtn">🎤 こえで かく</button>
+      <span id="stampTools">
+        <span class="toolLabel">スタンプ:</span>
+        <button class="toolbtn" id="stBig">おおきく</button>
+        <button class="toolbtn" id="stSmall">ちいさく</button>
+        <button class="toolbtn" id="stDel">🗑 けす</button>
+      </span>
+    </div>
+    <div id="stage"><div id="slideHolder"></div></div>
+  </section>
+</div>
+
+<!-- テンプレえらび -->
+<div class="modalWrap" id="tplModal">
+  <div class="modal">
+    <h2>どんな スライドを つくる?</h2>
+    <div id="tplGrid"></div>
+    <button class="close" id="tplClose">やめる</button>
+  </div>
+</div>
+
+<!-- スタンプえらび -->
+<div class="modalWrap" id="stampModal">
+  <div class="modal">
+    <h2>すきな スタンプを えらぼう</h2>
+    <div id="stampGrid"></div>
+    <button class="close" id="stampClose">やめる</button>
+  </div>
+</div>
+
+<!-- はっぴょうモード -->
+<div id="present">
+  <div id="pHolder"></div>
+  <button class="pnav" id="pPrev">◀</button>
+  <button class="pnav" id="pNext">▶</button>
+  <button id="pClose">✕ おわる</button>
+  <div id="pDots"></div>
+</div>
+
+<input type="file" id="fileInput" accept="image/*">
+<input type="file" id="loadInput" accept=".json,application/json">
+
+<script>
+'use strict';
+/* =========================================================
+   はっぴょうメーカー — 小学2年生むけプレゼンづくりアプリ
+   単一HTML / localStorage自動保存 / JSON書き出し・読み込み
+   ========================================================= */
+
+const STORE_KEY = 'happyo-maker-v1';
+const BG_COLORS = ['#FFFFFF','#FFF8E1','#E8F5E9','#E3F2FD','#FCE4EC','#EDE7F6'];
+const STAMP_EMOJI = ['🪲','🦋','🐞','🐛','🦗','🐜','🐝','🕷','🍃','🌳','🌻','🍄','🌙','⭐️','☀️','💧','🔍','👀','💪','❤️','✨','😊','🎉','👍','❗️','❓'];
+
+/* ---------- テンプレてぎ (960x540 きじゅん) ---------- */
+const TPL = {
+  title: { label:'ひょうし', icon:'📕', accent:'#FF9800',
+    boxes:[
+      { k:'t1', type:'text', x:60, y:130, w:840, h:170, size:52, bold:true, align:'center', ph:'だいめいを かこう' },
+      { k:'t2', type:'text', x:230, y:330, w:500, h:70, size:26, align:'center', ph:'なんねん なんくみ なまえ' },
+    ],
+    defStamps:[ {e:'🪲', x:110, y:410, s:72}, {e:'🌳', x:790, y:70, s:64} ] },
+
+  list: { label:'つたえたいこと', icon:'📋', accent:'#4CAF50',
+    heading:'きょう つたえたいこと',
+    boxes:[
+      { k:'t1', type:'row', n:'①', x:70, y:135, w:820, h:100, size:28, ph:'ひとつめ' },
+      { k:'t2', type:'row', n:'②', x:70, y:255, w:820, h:100, size:28, ph:'ふたつめ' },
+      { k:'t3', type:'row', n:'③', x:70, y:375, w:820, h:100, size:28, ph:'みっつめ' },
+    ] },
+
+  photoText: { label:'しゃしんと せつめい', icon:'📷', accent:'#2196F3',
+    heading:'みつけたよ',
+    boxes:[
+      { k:'p1', type:'photo', x:60, y:130, w:420, h:370 },
+      { k:'t1', type:'text', x:520, y:130, w:380, h:370, size:27, ph:'せつめいを かこう' },
+    ] },
+
+  kizuki: { label:'きづいたこと', icon:'💡', accent:'#FF9800',
+    heading:'きづいたこと',
+    boxes:[
+      { k:'t1', type:'text', x:60, y:125, w:840, h:135, size:28, ph:'きづいたことを かこう' },
+      { k:'p1', type:'photo', x:280, y:280, w:400, h:235 },
+    ] },
+
+  compare: { label:'くらべて みよう', icon:'⚖️', accent:'#9C27B0',
+    heading:'くらべて みよう',
+    boxes:[
+      { k:'la', type:'text', x:60, y:118, w:400, h:58, size:26, bold:true, align:'center', ph:'カブトムシ', bg:'rgba(255,138,101,.35)' },
+      { k:'lb', type:'text', x:500, y:118, w:400, h:58, size:26, bold:true, align:'center', ph:'クワガタ', bg:'rgba(100,181,246,.35)' },
+      { k:'pa', type:'photo', x:60, y:186, w:400, h:195 },
+      { k:'pb', type:'photo', x:500, y:186, w:400, h:195 },
+      { k:'ta', type:'text', x:60, y:392, w:400, h:118, size:22, ph:'とくちょうを かこう' },
+      { k:'tb', type:'text', x:500, y:392, w:400, h:118, size:22, ph:'とくちょうを かこう' },
+    ] },
+
+  kanso: { label:'かんそう', icon:'💗', accent:'#E91E63',
+    heading:'かんそう・これから',
+    boxes:[
+      { k:'t1', type:'text', x:80, y:135, w:800, h:360, size:30, ph:'おもったこと・これから やりたいことを かこう' },
+    ] },
+
+  end: { label:'おわり', icon:'🎉', accent:'#009688',
+    boxes:[
+      { k:'t1', type:'text', x:60, y:195, w:840, h:150, size:48, bold:true, align:'center', ph:'', def:'ありがとうございました' },
+    ],
+    defStamps:[ {e:'🎉', x:150, y:400, s:70}, {e:'✨', x:740, y:400, s:70} ] },
+};
+
+/* ---------- じょうたい ---------- */
+let state = { slides: [], cur: 0 };
+let selStamp = -1;          // えらんでいるスタンプの ばんごう
+let focusedTextKey = null;  // こえいれの あいて
+let photoTargetKey = null;
+let pIndex = 0;             // はっぴょうモードの ページ
+let editScale = 1;
+
+function newSlide(tplKey){
+  const t = TPL[tplKey];
+  const s = { tpl: tplKey, bg: 1, texts: {}, photos: {}, stamps: [] };
+  if (t.heading !== undefined) s.texts.h = t.heading;
+  t.boxes.forEach(b => { if (b.def) s.texts[b.k] = b.def; });
+  if (t.defStamps) s.stamps = t.defStamps.map(x => ({...x}));
+  return s;
+}
+
+/* ---------- ほぞん・よみこみ ---------- */
+let saveTimer = null;
+function save(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+    catch(e){ console.warn('save failed', e); }
+  }, 400);
+}
+function loadStore(){
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw){ const d = JSON.parse(raw); if (d && Array.isArray(d.slides) && d.slides.length) { state = d; return; } }
+  } catch(e){}
+  state = { slides: [newSlide('title')], cur: 0 };
+}
+
+/* ---------- スライドの えがき ---------- */
+function renderSlide(slide, opts){
+  const t = TPL[slide.tpl];
+  const el = document.createElement('div');
+  el.className = 'slide' + (opts.edit ? ' editable' : '');
+  el.style.background = BG_COLORS[slide.bg] || '#fff';
+
+  // みだしバンド
+  if (t.heading !== undefined){
+    const band = document.createElement('div');
+    band.className = 'band box';
+    Object.assign(band.style, { left:'40px', top:'28px', width:'880px', height:'74px', background:t.accent, fontSize:'34px' });
+    const htx = mkText(slide, 'h', { size:34, align:'center', ph:'みだし' }, opts, true);
+    htx.style.position = 'static'; htx.style.width = '96%'; htx.style.color = '#fff'; htx.style.border = 'none';
+    band.appendChild(htx);
+    el.appendChild(band);
+  }
+
+  t.boxes.forEach(b => {
+    if (b.type === 'photo'){
+      // しゃしんが ないときは、はっぴょうでは わくを ださない
+      if (slide.photos[b.k] || opts.edit) el.appendChild(mkPhoto(slide, b, opts));
+    } else if (b.type === 'row'){
+      const bg = document.createElement('div');
+      bg.className = 'rowbg';
+      Object.assign(bg.style, { left:b.x+'px', top:b.y+'px', width:b.w+'px', height:b.h+'px', background:'rgba(255,255,255,.75)', boxShadow:'0 2px 5px rgba(0,0,0,.08)' });
+      el.appendChild(bg);
+      const badge = document.createElement('div');
+      badge.className = 'rowbadge';
+      Object.assign(badge.style, { left:(b.x+14)+'px', top:(b.y+b.h/2-27)+'px', width:'54px', height:'54px', background:t.accent, fontSize:'28px' });
+      badge.textContent = b.n;
+      el.appendChild(badge);
+      const tx = mkText(slide, b.k, b, opts);
+      Object.assign(tx.style, { left:(b.x+84)+'px', top:(b.y+10)+'px', width:(b.w-100)+'px', height:(b.h-20)+'px' });
+      el.appendChild(tx);
+    } else {
+      const tx = mkText(slide, b.k, b, opts);
+      Object.assign(tx.style, { left:b.x+'px', top:b.y+'px', width:b.w+'px', height:b.h+'px' });
+      if (b.bg) tx.style.background = b.bg;
+      el.appendChild(tx);
+    }
+  });
+
+  // スタンプ
+  slide.stamps.forEach((st, i) => {
+    const sp = document.createElement('div');
+    sp.className = 'stamp' + (opts.edit && i === selStamp ? ' sel' : '');
+    sp.textContent = st.e;
+    Object.assign(sp.style, { left:st.x+'px', top:st.y+'px', fontSize:st.s+'px' });
+    if (opts.edit){
+      sp.addEventListener('pointerdown', ev => startStampDrag(ev, i));
+    }
+    el.appendChild(sp);
+  });
+
+  if (opts.edit){
+    // なにもない ところを タップ → スタンプせんたく かいじょ
+    el.addEventListener('pointerdown', ev => {
+      if (ev.target === el){ selStamp = -1; refreshStampUI(); }
+    });
+  }
+  return el;
+}
+
+function mkText(slide, key, def, opts, inBand){
+  const tx = document.createElement('div');
+  tx.className = 'tx box';
+  tx.style.fontSize = def.size + 'px';
+  if (def.bold) tx.style.fontWeight = 'bold';
+  if (def.align) tx.style.textAlign = def.align;
+  tx.dataset.ph = opts.edit ? (def.ph || '') : '';
+  tx.textContent = slide.texts[key] || '';
+  if (opts.edit){
+    tx.contentEditable = 'true';
+    tx.dataset.key = key;
+    tx.addEventListener('focus', () => { focusedTextKey = key; selStamp = -1; refreshStampUI(); });
+    tx.addEventListener('input', () => {
+      if (tx.innerText.trim() === '' && tx.textContent === '') tx.innerHTML = '';
+      slide.texts[key] = tx.innerText.replace(/\n$/,'');
+      save(); queueThumb();
+    });
+    tx.addEventListener('blur', () => { if (tx.innerText.trim() === '') { tx.innerHTML = ''; slide.texts[key] = ''; save(); } });
+  }
+  return tx;
+}
+
+function mkPhoto(slide, b, opts){
+  const ph = document.createElement('div');
+  ph.className = 'photo';
+  Object.assign(ph.style, { left:b.x+'px', top:b.y+'px', width:b.w+'px', height:b.h+'px' });
+  const data = slide.photos[b.k];
+  if (data){
+    const img = document.createElement('img');
+    img.src = data;
+    ph.appendChild(img);
+  } else {
+    const hint = document.createElement('div');
+    hint.className = 'phEmpty';
+    hint.innerHTML = opts.edit ? '📷<br>タップして<br>しゃしんを いれる' : '';
+    ph.appendChild(hint);
+  }
+  if (opts.edit){
+    ph.addEventListener('click', ev => {
+      if (ev.target.classList.contains('phX')) return;
+      photoTargetKey = b.k;
+      document.getElementById('fileInput').click();
+    });
+    if (data){
+      const x = document.createElement('button');
+      x.className = 'phX'; x.textContent = '✕';
+      x.addEventListener('click', ev => {
+        ev.stopPropagation();
+        if (confirm('この しゃしんを けしますか?')){
+          delete slide.photos[b.k]; save(); renderEditor(); renderThumbs();
+        }
+      });
+      ph.appendChild(x);
+    }
+  }
+  return ph;
+}
+
+/* ---------- エディタ ---------- */
+function renderEditor(){
+  const holder = document.getElementById('slideHolder');
+  holder.innerHTML = '';
+  const slide = state.slides[state.cur];
+  if (!slide) return;
+  const stage = document.getElementById('stage');
+  const availW = stage.clientWidth - 28, availH = stage.clientHeight - 28;
+  editScale = Math.min(availW / 960, availH / 540, 1.2);
+  holder.style.width = (960 * editScale) + 'px';
+  holder.style.height = (540 * editScale) + 'px';
+  const el = renderSlide(slide, { edit:true });
+  el.style.transform = `scale(${editScale})`;
+  holder.appendChild(el);
+  // いろパレットの せんたくひょうじ
+  document.querySelectorAll('#palette .swatch').forEach((sw, i) => sw.classList.toggle('sel', i === slide.bg));
+}
+
+let thumbTimer = null;
+function queueThumb(){ clearTimeout(thumbTimer); thumbTimer = setTimeout(renderThumbs, 600); }
+
+function renderThumbs(){
+  const list = document.getElementById('thumbList');
+  list.innerHTML = '';
+  const tw = window.innerWidth <= 700 ? 96 : 150;
+  const scale = tw / 960;
+  state.slides.forEach((slide, i) => {
+    const card = document.createElement('div');
+    card.className = 'thumb' + (i === state.cur ? ' sel' : '');
+    const stg = document.createElement('div');
+    stg.className = 'tstage';
+    const el = renderSlide(slide, { edit:false });
+    el.style.transform = `scale(${scale})`;
+    stg.appendChild(el);
+    const num = document.createElement('span');
+    num.className = 'tnum'; num.textContent = i + 1;
+    card.appendChild(num); card.appendChild(stg);
+
+    const ctrl = document.createElement('div');
+    ctrl.className = 'tctrl';
+    ctrl.innerHTML = `<button data-a="up" title="うえへ">⬆️</button><button data-a="down" title="したへ">⬇️</button><button data-a="del" title="けす">🗑</button>`;
+    card.appendChild(ctrl);
+
+    card.addEventListener('click', ev => {
+      const a = ev.target.dataset && ev.target.dataset.a;
+      if (a === 'up' && i > 0){
+        [state.slides[i-1], state.slides[i]] = [state.slides[i], state.slides[i-1]];
+        state.cur = i - 1; save(); renderAll(); return;
+      }
+      if (a === 'down' && i < state.slides.length - 1){
+        [state.slides[i+1], state.slides[i]] = [state.slides[i], state.slides[i+1]];
+        state.cur = i + 1; save(); renderAll(); return;
+      }
+      if (a === 'del'){
+        if (state.slides.length === 1){ alert('さいごの 1まいは けせないよ'); return; }
+        if (confirm((i+1) + 'ばんめの スライドを けしますか?')){
+          state.slides.splice(i, 1);
+          if (state.cur >= state.slides.length) state.cur = state.slides.length - 1;
+          save(); renderAll();
+        }
+        return;
+      }
+      state.cur = i; selStamp = -1; renderAll();
+    });
+    list.appendChild(card);
+  });
+}
+
+function renderAll(){ renderEditor(); renderThumbs(); refreshStampUI(); }
+
+/* ---------- いろ ---------- */
+function buildPalette(){
+  const p = document.getElementById('palette');
+  BG_COLORS.forEach((c, i) => {
+    const b = document.createElement('button');
+    b.className = 'swatch'; b.style.background = c;
+    b.addEventListener('click', () => {
+      state.slides[state.cur].bg = i; save(); renderAll();
+    });
+    p.appendChild(b);
+  });
+}
+
+/* ---------- スタンプ ---------- */
+function buildStampGrid(){
+  const g = document.getElementById('stampGrid');
+  STAMP_EMOJI.forEach(e => {
+    const b = document.createElement('button');
+    b.className = 'stampChoice'; b.textContent = e;
+    b.addEventListener('click', () => {
+      const slide = state.slides[state.cur];
+      slide.stamps.push({ e, x: 440, y: 230, s: 68 });
+      selStamp = slide.stamps.length - 1;
+      document.getElementById('stampModal').classList.remove('show');
+      save(); renderEditor(); queueThumb(); refreshStampUI();
+    });
+    g.appendChild(b);
+  });
+}
+
+function refreshStampUI(){
+  document.getElementById('stampTools').classList.toggle('show', selStamp >= 0);
+  // せんたくわくの ひょうじを こうしん
+  const holder = document.getElementById('slideHolder');
+  holder.querySelectorAll('.stamp').forEach((sp, i) => sp.classList.toggle('sel', i === selStamp));
+}
+
+function startStampDrag(ev, idx){
+  ev.preventDefault(); ev.stopPropagation();
+  selStamp = idx; refreshStampUI();
+  const slide = state.slides[state.cur];
+  const st = slide.stamps[idx];
+  const startX = ev.clientX, startY = ev.clientY, ox = st.x, oy = st.y;
+  const move = e => {
+    st.x = Math.max(-30, Math.min(930, ox + (e.clientX - startX) / editScale));
+    st.y = Math.max(-30, Math.min(510, oy + (e.clientY - startY) / editScale));
+    const sp = document.getElementById('slideHolder').querySelectorAll('.stamp')[idx];
+    if (sp){ sp.style.left = st.x + 'px'; sp.style.top = st.y + 'px'; }
+  };
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    save(); queueThumb();
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+}
+
+document.getElementById('stBig').addEventListener('click', () => bumpStamp(1.2));
+document.getElementById('stSmall').addEventListener('click', () => bumpStamp(1/1.2));
+document.getElementById('stDel').addEventListener('click', () => {
+  const slide = state.slides[state.cur];
+  if (selStamp >= 0){ slide.stamps.splice(selStamp, 1); selStamp = -1; save(); renderEditor(); queueThumb(); refreshStampUI(); }
+});
+function bumpStamp(f){
+  const slide = state.slides[state.cur];
+  const st = slide.stamps[selStamp];
+  if (!st) return;
+  st.s = Math.max(24, Math.min(220, Math.round(st.s * f)));
+  save(); renderEditor(); queueThumb(); refreshStampUI();
+}
+
+/* ---------- しゃしん ---------- */
+document.getElementById('fileInput').addEventListener('change', ev => {
+  const file = ev.target.files[0];
+  ev.target.value = '';
+  if (!file || !photoTargetKey) return;
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  img.onload = () => {
+    const MAX = 900;
+    let w = img.width, h = img.height;
+    if (Math.max(w, h) > MAX){ const r = MAX / Math.max(w, h); w = Math.round(w*r); h = Math.round(h*r); }
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    cv.getContext('2d').drawImage(img, 0, 0, w, h);
+    URL.revokeObjectURL(url);
+    state.slides[state.cur].photos[photoTargetKey] = cv.toDataURL('image/jpeg', 0.82);
+    photoTargetKey = null;
+    save(); renderEditor(); renderThumbs();
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); alert('この しゃしんは ひらけなかったよ'); };
+  img.src = url;
+});
+
+/* ---------- こえで かく ---------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recog = null, recording = false;
+document.getElementById('micBtn').addEventListener('click', () => {
+  const btn = document.getElementById('micBtn');
+  if (recording){ try{ recog.stop(); }catch(e){} return; }
+  if (!SR){ alert('この ブラウザでは こえいれが つかえないよ。じぶんで もじを うってね。'); return; }
+  if (!focusedTextKey){ alert('さきに、かきたい もじの ばしょを タップしてね'); return; }
+  const key = focusedTextKey;
+  recog = new SR();
+  recog.lang = 'ja-JP';
+  recog.interimResults = false;
+  recog.onresult = e => {
+    const said = e.results[0][0].transcript;
+    const slide = state.slides[state.cur];
+    slide.texts[key] = (slide.texts[key] || '') + said;
+    save(); renderEditor(); queueThumb();
+  };
+  recog.onend = () => { recording = false; btn.classList.remove('rec'); btn.textContent = '🎤 こえで かく'; };
+  recog.onerror = ev2 => {
+    recording = false; btn.classList.remove('rec'); btn.textContent = '🎤 こえで かく';
+    if (ev2.error === 'not-allowed') alert('マイクの つかいかたが ゆるされて いないよ。せんせいに きいてね。');
+  };
+  recording = true; btn.classList.add('rec'); btn.textContent = '🔴 おはなし してね…';
+  recog.start();
+});
+
+/* ---------- テンプレモーダル ---------- */
+function buildTplGrid(){
+  const g = document.getElementById('tplGrid');
+  Object.entries(TPL).forEach(([key, t]) => {
+    const b = document.createElement('button');
+    b.className = 'tplCard';
+    b.innerHTML = `<span class="big">${t.icon}</span>${t.label}`;
+    b.addEventListener('click', () => {
+      state.slides.splice(state.cur + 1, 0, newSlide(key));
+      state.cur += 1; selStamp = -1;
+      document.getElementById('tplModal').classList.remove('show');
+      save(); renderAll();
+    });
+    g.appendChild(b);
+  });
+}
+document.getElementById('addSlideBtn').addEventListener('click', () => document.getElementById('tplModal').classList.add('show'));
+document.getElementById('tplClose').addEventListener('click', () => document.getElementById('tplModal').classList.remove('show'));
+document.getElementById('stampBtn').addEventListener('click', () => document.getElementById('stampModal').classList.add('show'));
+document.getElementById('stampClose').addEventListener('click', () => document.getElementById('stampModal').classList.remove('show'));
+
+/* ---------- はっぴょうモード ---------- */
+function showPresent(){
+  pIndex = state.cur;
+  document.getElementById('present').classList.add('show');
+  if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(()=>{});
+  renderPresent();
+}
+function hidePresent(){
+  document.getElementById('present').classList.remove('show');
+  if (document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+}
+function renderPresent(){
+  const holder = document.getElementById('pHolder');
+  holder.innerHTML = '';
+  const scale = Math.min(window.innerWidth / 960, window.innerHeight / 540) * 0.96;
+  holder.style.width = 960 * scale + 'px';
+  holder.style.height = 540 * scale + 'px';
+  const el = renderSlide(state.slides[pIndex], { edit:false });
+  el.style.transform = `scale(${scale})`;
+  holder.appendChild(el);
+  document.getElementById('pDots').textContent = (pIndex + 1) + ' / ' + state.slides.length;
+}
+document.getElementById('presentBtn').addEventListener('click', showPresent);
+document.getElementById('pClose').addEventListener('click', hidePresent);
+document.getElementById('pNext').addEventListener('click', () => { if (pIndex < state.slides.length - 1){ pIndex++; renderPresent(); } });
+document.getElementById('pPrev').addEventListener('click', () => { if (pIndex > 0){ pIndex--; renderPresent(); } });
+document.getElementById('pHolder').addEventListener('click', () => { if (pIndex < state.slides.length - 1){ pIndex++; renderPresent(); } });
+window.addEventListener('keydown', e => {
+  if (!document.getElementById('present').classList.contains('show')) return;
+  if (e.key === 'ArrowRight' || e.key === ' '){ if (pIndex < state.slides.length - 1){ pIndex++; renderPresent(); } }
+  if (e.key === 'ArrowLeft'){ if (pIndex > 0){ pIndex--; renderPresent(); } }
+  if (e.key === 'Escape') hidePresent();
+});
+
+/* ---------- ほぞん(ファイル) / ひらく ---------- */
+document.getElementById('saveBtn').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(state)], { type:'application/json' });
+  const a = document.createElement('a');
+  const d = new Date();
+  a.download = 'はっぴょう_' + d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0') + '.json';
+  a.href = URL.createObjectURL(blob);
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  alert('ほぞん できたよ! (ダウンロードフォルダに はいったよ)');
+});
+document.getElementById('openBtn').addEventListener('click', () => {
+  if (confirm('ほぞんした ファイルを ひらくと、いまの スライドは きえるよ。いい?')) document.getElementById('loadInput').click();
+});
+document.getElementById('loadInput').addEventListener('change', ev => {
+  const file = ev.target.files[0];
+  ev.target.value = '';
+  if (!file) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const d = JSON.parse(r.result);
+      if (!d || !Array.isArray(d.slides) || !d.slides.length) throw 0;
+      state = d; state.cur = 0; selStamp = -1;
+      save(); renderAll();
+    } catch(e){ alert('この ファイルは ひらけなかったよ'); }
+  };
+  r.readAsText(file);
+});
+
+/* ---------- おてほん (カブトムシとクワガタ) ---------- */
+function sampleData(){
+  const mk = (tpl, texts, stamps) => { const s = newSlide(tpl); Object.assign(s.texts, texts); if (stamps) s.stamps = stamps; return s; };
+  return { cur: 0, slides: [
+    mk('title', { t1:'カブトムシと クワガタの\nかんさつ はっぴょう', t2:'2ねん◯くみ なまえ' }),
+    mk('list', { h:'きょう つたえたいこと', t1:'いつ・どこで つかまえたか', t2:'すみかと ごはんの こと', t3:'そだてて 気づいたこと' }),
+    mk('photoText', { h:'いつ・どこで みつけたかな', t1:'なつやすみに、ちかくの こうえんの クヌギの木で みつけたよ。\n\nカブトムシと クワガタが いたよ。' }, [{e:'🌳',x:820,y:440,s:64}]),
+    mk('photoText', { h:'すみかと ごはん', t1:'虫かごに 土と くさった木と おち葉を 入れたよ。\n\nごはんは こん虫ゼリー。口を のばして ペロペロ たべるよ。' }, [{e:'🍃',x:830,y:60,s:56}]),
+    mk('kizuki', { h:'きづいたこと① よるは 元気', t1:'ひるは 土の中で じっと している。よるに なると、かごの中を 元気に あるきまわるよ。これを「夜行性」と いうんだって!' }, [{e:'🌙',x:850,y:440,s:64}]),
+    mk('compare', { h:'くらべて みよう', la:'カブトムシ', lb:'クワガタ', ta:'ツノが ある。\nツノは オスだけ!', tb:'大きな ハサミ(大あご)が ある。木のしるを とりあうよ。' }),
+    mk('kizuki', { h:'きづいたこと② あしの トゲトゲ', t1:'虫めがねで あしを よく見たら、小さい トゲトゲが いっぱい! 木や あみに しっかり つかまる ひみつだと わかったよ。' }, [{e:'🔍',x:850,y:440,s:64}]),
+    mk('kanso', { h:'かんそう・これから', t1:'よるに うごきだすのを 見て、とても おどろいたよ。ツノや ハサミには ちゃんと りゆうが あった。\n\nこれからも 大切に そだてて、もっと いろいろな ことを 見つけたいです。' }, [{e:'❤️',x:830,y:440,s:60}]),
+    mk('end', {}),
+  ]};
+}
+document.getElementById('sampleBtn').addEventListener('click', () => {
+  if (confirm('おてほんを ひらくよ。いま つくって いる ものは きえるよ。いい?')){
+    state = sampleData(); selStamp = -1;
+    save(); renderAll();
+  }
+});
+
+/* ---------- スタート ---------- */
+window.addEventListener('resize', () => {
+  renderEditor();
+  if (document.getElementById('present').classList.contains('show')) renderPresent();
+});
+buildPalette(); buildStampGrid(); buildTplGrid();
+loadStore();
+renderAll();
+</script>
+</body>
+</html>
