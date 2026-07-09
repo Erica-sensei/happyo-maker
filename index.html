@@ -229,6 +229,30 @@
   </div>
 </div>
 
+<!-- なまえをつけて ほぞん -->
+<div class="modalWrap" id="saveModal">
+  <div class="modal" style="max-width:460px;text-align:center;">
+    <h2>なまえを つけて ほぞん</h2>
+    <p style="font-size:14px;color:#8D6E63;margin:0 0 8px;">じぶんの なまえや くみを かいてね</p>
+    <input type="text" id="saveName" maxlength="24" placeholder="れい: 2ねん1くみ たろう"
+      style="width:92%;padding:12px;font-size:18px;border:2px solid #FFB74D;border-radius:12px;text-align:center;box-sizing:border-box;">
+    <div id="saveOver"></div>
+    <div style="display:flex;gap:10px;justify-content:center;margin-top:16px;">
+      <button class="close" id="saveCancel" style="margin:0;">やめる</button>
+      <button class="tbtn primary" id="saveDo" style="font-size:16px;padding:10px 22px;">💾 ほぞんする</button>
+    </div>
+  </div>
+</div>
+
+<!-- ほぞんした はっぴょうを ひらく -->
+<div class="modalWrap" id="loadModal">
+  <div class="modal" style="max-width:460px;">
+    <h2>ほぞんした はっぴょうを ひらく</h2>
+    <div id="slotList"></div>
+    <button class="close" id="loadCancel">やめる</button>
+  </div>
+</div>
+
 <!-- はっぴょうモード -->
 <div id="present">
   <div id="pHolder"></div>
@@ -239,13 +263,12 @@
 </div>
 
 <input type="file" id="fileInput" accept="image/*">
-<input type="file" id="loadInput" accept=".json,application/json">
 
 <script>
 'use strict';
 /* =========================================================
    はっぴょうメーカー — 小学2年生むけプレゼンづくりアプリ
-   単一HTML / localStorage自動保存 / JSON書き出し・読み込み
+   単一HTML / localStorage自動保存 / なまえつき保存スロット(ダウンロード不使用)
    ========================================================= */
 
 const STORE_KEY = 'happyo-maker-v1';
@@ -710,35 +733,115 @@ window.addEventListener('keydown', e => {
   if (e.key === 'Escape') hidePresent();
 });
 
-/* ---------- ほぞん(ファイル) / ひらく ---------- */
+/* ---------- ほぞん(なまえつき) / ひらく ----------
+   ダウンロードは Googleサイト埋め込み(サンドボックス)でブロックされるため、
+   ブラウザの中(localStorage)に なまえを つけて ためる方式にする。 */
+const SLOTS_KEY = 'happyo-maker-slots-v1';
+const LASTNAME_KEY = 'happyo-maker-lastname';
+function getSlots(){
+  try { const a = JSON.parse(localStorage.getItem(SLOTS_KEY)); return Array.isArray(a) ? a : []; }
+  catch(e){ return []; }
+}
+function setSlots(a){ localStorage.setItem(SLOTS_KEY, JSON.stringify(a)); } // 容量オーバーで throw しうる
+function todayStr(){ const d = new Date(); return d.getFullYear() + '/' + (d.getMonth()+1) + '/' + d.getDate(); }
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function toast(msg){
+  const t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = 'position:fixed;left:50%;bottom:40px;transform:translateX(-50%);background:#4E342E;color:#fff;padding:13px 26px;border-radius:30px;font-size:18px;font-weight:bold;z-index:9999;box-shadow:0 4px 14px rgba(0,0,0,.35);opacity:0;transition:opacity .25s;max-width:88%;text-align:center;';
+  document.body.appendChild(t);
+  requestAnimationFrame(() => { t.style.opacity = '1'; });
+  setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 2000);
+}
+
+/* --- ほぞん モーダル --- */
+const saveModal = document.getElementById('saveModal');
+const saveNameInput = document.getElementById('saveName');
 document.getElementById('saveBtn').addEventListener('click', () => {
-  const blob = new Blob([JSON.stringify(state)], { type:'application/json' });
-  const a = document.createElement('a');
-  const d = new Date();
-  a.download = 'はっぴょう_' + d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0') + '.json';
-  a.href = URL.createObjectURL(blob);
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  alert('ほぞん できたよ! (ダウンロードフォルダに はいったよ)');
+  saveNameInput.value = localStorage.getItem(LASTNAME_KEY) || '';
+  renderSaveChips();
+  saveModal.classList.add('show');
+  setTimeout(() => saveNameInput.focus(), 50);
 });
+document.getElementById('saveCancel').addEventListener('click', () => saveModal.classList.remove('show'));
+function renderSaveChips(){
+  const box = document.getElementById('saveOver');
+  const slots = getSlots();
+  if (!slots.length){ box.innerHTML = ''; return; }
+  box.innerHTML = '<div style="font-size:13px;color:#999;margin:10px 0 2px;">まえに ほぞんした なまえ(タップで えらべる):</div>';
+  slots.forEach(s => {
+    const b = document.createElement('button');
+    b.textContent = s.name;
+    b.style.cssText = 'margin:3px;padding:6px 12px;border-radius:20px;border:2px solid #FFD54F;background:#FFFDE7;font-size:14px;';
+    b.onclick = () => { saveNameInput.value = s.name; };
+    box.appendChild(b);
+  });
+}
+document.getElementById('saveDo').addEventListener('click', () => {
+  const name = (saveNameInput.value || '').trim() || ('はっぴょう ' + todayStr());
+  const slots = getSlots();
+  const rec = { name, date: todayStr(), data: state };
+  const i = slots.findIndex(s => s.name === name);
+  if (i >= 0) slots[i] = rec; else slots.push(rec);
+  try {
+    setSlots(slots);
+    localStorage.setItem(LASTNAME_KEY, name);
+    saveModal.classList.remove('show');
+    toast('「' + name + '」で ほぞんできたよ!');
+  } catch(e){
+    toast('ほぞんが いっぱいで できなかったよ。ふるいのを けしてね');
+  }
+});
+
+/* --- ひらく モーダル --- */
+const loadModal = document.getElementById('loadModal');
 document.getElementById('openBtn').addEventListener('click', () => {
-  if (confirm('ほぞんした ファイルを ひらくと、いまの スライドは きえるよ。いい?')) document.getElementById('loadInput').click();
+  renderSlotList();
+  loadModal.classList.add('show');
 });
-document.getElementById('loadInput').addEventListener('change', ev => {
-  const file = ev.target.files[0];
-  ev.target.value = '';
-  if (!file) return;
-  const r = new FileReader();
-  r.onload = () => {
-    try {
-      const d = JSON.parse(r.result);
-      if (!d || !Array.isArray(d.slides) || !d.slides.length) throw 0;
-      state = d; state.cur = 0; selStamp = -1;
+document.getElementById('loadCancel').addEventListener('click', () => loadModal.classList.remove('show'));
+function renderSlotList(){
+  const list = document.getElementById('slotList');
+  const slots = getSlots();
+  list.innerHTML = '';
+  if (!slots.length){
+    list.innerHTML = '<p style="color:#999;padding:16px;text-align:center;line-height:1.7;">まだ ほぞんした ものが ないよ。<br>「💾 ほぞん」で なまえを つけて ほぞんしてね。</p>';
+    return;
+  }
+  const warn = document.createElement('p');
+  warn.style.cssText = 'font-size:13px;color:#E57373;text-align:center;margin:2px 0 8px;line-height:1.6;';
+  warn.innerHTML = 'ひらくと、いま つくって いる ものは きえるよ。<br>さきに 「💾 ほぞん」して おいてね。';
+  list.appendChild(warn);
+  slots.slice().reverse().forEach(s => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:10px;border:2px solid #EEE;border-radius:14px;margin:6px 0;background:#fff;';
+    const info = document.createElement('div');
+    info.style.cssText = 'flex:1;text-align:left;min-width:0;';
+    info.innerHTML = '<div style="font-size:17px;font-weight:bold;color:#5D4037;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(s.name) + '</div><div style="font-size:12px;color:#AAA;">' + escapeHtml(s.date || '') + '</div>';
+    const openB = document.createElement('button');
+    openB.className = 'tbtn primary';
+    openB.style.cssText = 'font-size:15px;padding:9px 14px;white-space:nowrap;';
+    openB.textContent = '📂 ひらく';
+    openB.onclick = () => {
+      state = JSON.parse(JSON.stringify(s.data));
+      state.cur = 0; selStamp = -1;
       save(); renderAll();
-    } catch(e){ alert('この ファイルは ひらけなかったよ'); }
-  };
-  r.readAsText(file);
-});
+      loadModal.classList.remove('show');
+      toast('「' + s.name + '」を ひらいたよ!');
+    };
+    const delB = document.createElement('button');
+    delB.className = 'tbtn';
+    delB.style.cssText = 'font-size:18px;padding:9px 12px;';
+    delB.textContent = '🗑';
+    delB.onclick = () => {
+      const all = getSlots();
+      const idx = all.findIndex(x => x.name === s.name);
+      if (idx >= 0){ all.splice(idx, 1); setSlots(all); renderSlotList(); }
+    };
+    row.appendChild(info); row.appendChild(openB); row.appendChild(delB);
+    list.appendChild(row);
+  });
+}
 
 /* ---------- おてほん (カブトムシとクワガタ) ---------- */
 function sampleData(){
