@@ -651,8 +651,13 @@ document.getElementById('fileInput').addEventListener('change', ev => {
   img.src = url;
 });
 
-/* ---------- こえで かく ---------- */
+/* ---------- こえで かく ----------
+   音声入力はマイク権限が必要。Googleサイト埋め込み(iframe)は中のアプリに
+   マイク許可を渡さない(親側の設定で変更不可)ため、埋め込み内では必ず失敗する。
+   → 埋め込み時・非対応ブラウザでは 🎤ボタンを隠す(キーボード入力は使える)。 */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const EMBEDDED = (function(){ try { return window.self !== window.top; } catch(e){ return true; } })();
+if (EMBEDDED || !SR){ const mb = document.getElementById('micBtn'); if (mb) mb.style.display = 'none'; }
 let recog = null, recording = false;
 document.getElementById('micBtn').addEventListener('click', () => {
   const btn = document.getElementById('micBtn');
@@ -672,7 +677,7 @@ document.getElementById('micBtn').addEventListener('click', () => {
   recog.onend = () => { recording = false; btn.classList.remove('rec'); btn.textContent = '🎤 こえで かく'; };
   recog.onerror = ev2 => {
     recording = false; btn.classList.remove('rec'); btn.textContent = '🎤 こえで かく';
-    if (ev2.error === 'not-allowed') alert('マイクの つかいかたが ゆるされて いないよ。せんせいに きいてね。');
+    if (ev2.error === 'not-allowed' || ev2.error === 'service-not-allowed') alert('マイクが つかえないよ。キーボードで もじを うってね。');
   };
   recording = true; btn.classList.add('rec'); btn.textContent = '🔴 おはなし してね…';
   recog.start();
