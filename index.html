@@ -258,6 +258,9 @@
   <button class="tbtn" id="sampleBtn">🐛 おてほん</button>
   <button class="tbtn" id="saveBtn">💾 ほぞん</button>
   <button class="tbtn" id="openBtn">📂 ひらく</button>
+  <!-- ↓Google Apps Script で うごかしたときだけ 出る -->
+  <button class="tbtn" id="sendBtn" style="display:none;background:#009688;color:#fff;">📤 せんせいに おくる</button>
+  <button class="tbtn" id="teacherBtn" style="display:none;background:#5D4037;color:#fff;">👩‍🏫 みんなの さくひん</button>
 </header>
 
 <div id="main">
@@ -364,6 +367,31 @@
     <h2>ほぞんした はっぴょうを ひらく</h2>
     <div id="slotList"></div>
     <button class="close" id="loadCancel">やめる</button>
+  </div>
+</div>
+
+<!-- せんせいに おくる -->
+<div class="modalWrap" id="sendModal">
+  <div class="modal" style="max-width:460px;text-align:center;">
+    <h2>📤 せんせいに おくる</h2>
+    <p style="font-size:14px;color:#8D6E63;margin:0 0 8px;">なまえを かいて、おくるボタンを おしてね</p>
+    <input type="text" id="sendName" maxlength="24" placeholder="れい: 1ねん1くみ たろう"
+      style="width:92%;padding:12px;font-size:18px;border:2px solid #FFB74D;border-radius:12px;text-align:center;box-sizing:border-box;">
+    <div id="sendChips"></div>
+    <div id="sendProg" style="display:none;font-size:16px;font-weight:bold;color:#00796B;margin-top:14px;"></div>
+    <div style="display:flex;gap:10px;justify-content:center;margin-top:16px;">
+      <button class="close" id="sendCancel" style="margin:0;">やめる</button>
+      <button class="tbtn primary" id="sendDo" style="font-size:16px;padding:10px 22px;background:#009688;">📤 おくる</button>
+    </div>
+  </div>
+</div>
+
+<!-- みんなの さくひん(せんせい用) -->
+<div class="modalWrap" id="teacherModal">
+  <div class="modal" style="max-width:560px;">
+    <h2>👩‍🏫 みんなの さくひん</h2>
+    <div id="workList"></div>
+    <button class="close" id="teacherCancel">とじる</button>
   </div>
 </div>
 
@@ -1418,6 +1446,172 @@ document.getElementById('sampleBtn').addEventListener('click', () => {
     save(); renderAll();
   }
 });
+
+/* ---------- せんせいに おくる (Google Apps Script のウェブアプリのときだけ) ----------
+   Googleサイト埋め込みでは そもそも 外に おくれないので、この きのうは
+   GAS(HtmlService)で ひらいたときだけ ボタンが 出る。
+   通信は google.script.run。データが 大きいので 小分けにして おくる。 */
+const GAS = !!(window.google && window.google.script && window.google.script.run);
+const SEND_CHUNK = 150000;   // 1回に おくる 文字数
+let gasKey = '';             // URLの ?key=... (せんせいモードの あいことば)
+let gasWho = null;           // { email, isTeacher }
+let sending = false;
+
+function gasFail(err){
+  sending = false;
+  setSendProg('');
+  document.getElementById('sendDo').disabled = false;
+  const msg = (err && err.message) ? err.message : 'わかりません';
+  alert('おくれませんでした。もう1かい ためしてね。\n\n(' + msg + ')');
+}
+function setSendProg(text){
+  const el = document.getElementById('sendProg');
+  el.textContent = text || '';
+  el.style.display = text ? 'block' : 'none';
+}
+
+if (GAS){
+  document.getElementById('sendBtn').style.display = '';
+  // iframeの中なので、URLの ?key= は google.script.url でしか よめない
+  try {
+    google.script.url.getLocation(loc => {
+      gasKey = (loc && loc.parameter && loc.parameter.key) || '';
+      gasWhoAmI();
+    });
+  } catch(e){ gasWhoAmI(); }
+}
+function gasWhoAmI(){
+  google.script.run
+    .withSuccessHandler(w => {
+      gasWho = w || {};
+      if (gasWho.isTeacher) document.getElementById('teacherBtn').style.display = '';
+    })
+    .withFailureHandler(() => {})
+    .getWho(gasKey);
+}
+
+/* --- おくる --- */
+document.getElementById('sendBtn').addEventListener('click', () => {
+  const inp = document.getElementById('sendName');
+  inp.value = localStorage.getItem(LASTNAME_KEY) || '';
+  setSendProg('');
+  document.getElementById('sendDo').disabled = false;
+  renderSendChips();
+  document.getElementById('sendModal').classList.add('show');
+  setTimeout(() => inp.focus(), 50);
+});
+document.getElementById('sendCancel').addEventListener('click', () => {
+  if (sending){ if (!confirm('おくって いる ところだよ。やめる?')) return; }
+  sending = false;
+  document.getElementById('sendModal').classList.remove('show');
+});
+function renderSendChips(){
+  const box = document.getElementById('sendChips');
+  const last = localStorage.getItem(LASTNAME_KEY);
+  box.innerHTML = last
+    ? '<div style="font-size:13px;color:#999;margin:10px 0 2px;">まえに つかった なまえ: ' + escapeHtml(last) + '</div>'
+    : '';
+}
+function workTitle(){
+  const s = state.slides[0];
+  if (!s || !s.texts) return '';
+  return (s.texts.t1 || s.texts.h || '').replace(/\n/g, ' ').slice(0, 60);
+}
+function workAllText(){
+  return state.slides.map((s, i) => {
+    const t = Object.keys(s.texts || {}).map(k => s.texts[k]).filter(v => v).join(' / ');
+    return (i + 1) + '. ' + t;
+  }).join('\n');
+}
+document.getElementById('sendDo').addEventListener('click', () => {
+  if (sending) return;
+  const name = (document.getElementById('sendName').value || '').trim();
+  if (!name){ alert('なまえを かいてね'); return; }
+  const json = JSON.stringify(state);
+  const chunks = [];
+  for (let i = 0; i < json.length; i += SEND_CHUNK) chunks.push(json.slice(i, i + SEND_CHUNK));
+  const meta = { name: name, title: workTitle(), slides: state.slides.length, text: workAllText().slice(0, 40000) };
+  sending = true;
+  document.getElementById('sendDo').disabled = true;
+  setSendProg('じゅんび しています…');
+  google.script.run.withSuccessHandler(id => sendChunk(id, chunks, 0, name))
+    .withFailureHandler(gasFail).startUpload(meta);
+});
+function sendChunk(uploadId, chunks, i, name){
+  if (!sending) return;                       // やめる を おされた
+  if (i >= chunks.length){
+    setSendProg('もう すこし…');
+    google.script.run.withSuccessHandler(() => {
+      sending = false;
+      localStorage.setItem(LASTNAME_KEY, name);
+      setSendProg('');
+      document.getElementById('sendDo').disabled = false;
+      document.getElementById('sendModal').classList.remove('show');
+      toast('せんせいに おくれたよ!');
+    }).withFailureHandler(gasFail).finishUpload(uploadId);
+    return;
+  }
+  setSendProg('おくって います… ' + (i + 1) + ' / ' + chunks.length);
+  google.script.run.withSuccessHandler(() => sendChunk(uploadId, chunks, i + 1, name))
+    .withFailureHandler(gasFail).appendChunk(uploadId, i, chunks[i]);
+}
+
+/* --- せんせい用: みんなの さくひん --- */
+document.getElementById('teacherBtn').addEventListener('click', () => {
+  const list = document.getElementById('workList');
+  list.innerHTML = '<p style="text-align:center;color:#999;padding:16px;">よみこんで います…</p>';
+  document.getElementById('teacherModal').classList.add('show');
+  google.script.run.withSuccessHandler(renderWorkList).withFailureHandler(gasFail).listWorks(gasKey);
+});
+document.getElementById('teacherCancel').addEventListener('click', () =>
+  document.getElementById('teacherModal').classList.remove('show'));
+
+function renderWorkList(works){
+  const list = document.getElementById('workList');
+  list.innerHTML = '';
+  if (!works || !works.length){
+    list.innerHTML = '<p style="text-align:center;color:#999;padding:16px;line-height:1.7;">まだ ていしゅつが ありません。</p>';
+    return;
+  }
+  const info = document.createElement('p');
+  info.style.cssText = 'font-size:13px;color:#8D6E63;text-align:center;margin:2px 0 10px;line-height:1.6;';
+  info.textContent = works.length + 'けん。ひらくと、いま つくって いる ものは きえます。';
+  list.appendChild(info);
+  works.forEach(w => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:10px;border:2px solid #EEE;border-radius:14px;margin:6px 0;background:#fff;';
+    const box = document.createElement('div');
+    box.style.cssText = 'flex:1;text-align:left;min-width:0;';
+    box.innerHTML = '<div style="font-size:17px;font-weight:bold;color:#5D4037;">' + escapeHtml(w.name) + '</div>' +
+      '<div style="font-size:12px;color:#AAA;">' + escapeHtml(w.date) + ' ・ ' + (w.slides || 0) + 'まい' +
+      (w.title ? ' ・ ' + escapeHtml(w.title) : '') + '</div>';
+    const open = document.createElement('button');
+    open.className = 'tbtn primary';
+    open.style.cssText = 'font-size:15px;padding:9px 14px;white-space:nowrap;';
+    open.textContent = '📂 ひらく';
+    open.onclick = () => {
+      if (!confirm('「' + w.name + '」を ひらきます。いま つくって いる ものは きえます。いい?')) return;
+      open.textContent = 'よみこみ中…'; open.disabled = true;
+      readWork(w.fileId, 0, '', w.name);
+    };
+    row.appendChild(box); row.appendChild(open);
+    list.appendChild(row);
+  });
+}
+function readWork(fileId, index, acc, name){
+  google.script.run.withSuccessHandler(res => {
+    const text = acc + (res.text || '');
+    if (!res.done){ readWork(fileId, index + 1, text, name); return; }
+    try {
+      const d = JSON.parse(text);
+      if (!d || !Array.isArray(d.slides) || !d.slides.length) throw new Error('からっぽ');
+      state = d; state.cur = 0; selStamp = -1;
+      save(); renderAll();
+      document.getElementById('teacherModal').classList.remove('show');
+      toast('「' + name + '」を ひらいたよ');
+    } catch(e){ alert('この さくひんは ひらけませんでした (' + e.message + ')'); }
+  }).withFailureHandler(gasFail).getWorkChunk(fileId, index, gasKey);
+}
 
 /* ---------- スタート ---------- */
 window.addEventListener('resize', () => {
