@@ -1451,7 +1451,7 @@ document.getElementById('sampleBtn').addEventListener('click', () => {
    Googleサイト埋め込みでは そもそも 外に おくれないので、この きのうは
    GAS(HtmlService)で ひらいたときだけ ボタンが 出る。
    通信は google.script.run。データが 大きいので 小分けにして おくる。 */
-const GAS = !!(window.google && window.google.script && window.google.script.run);
+let GAS = false;             // GASウェブアプリの中で うごいて いるか
 const SEND_CHUNK = 150000;   // 1回に おくる 文字数
 let gasKey = '';             // URLの ?key=... (せんせいモードの あいことば)
 let gasWho = null;           // { email, isTeacher }
@@ -1470,16 +1470,24 @@ function setSendProg(text){
   el.style.display = text ? 'block' : 'none';
 }
 
-if (GAS){
-  document.getElementById('sendBtn').style.display = '';
-  // iframeの中なので、URLの ?key= は google.script.url でしか よめない
-  try {
-    google.script.url.getLocation(loc => {
-      gasKey = (loc && loc.parameter && loc.parameter.key) || '';
-      gasWhoAmI();
-    });
-  } catch(e){ gasWhoAmI(); }
+/* GASの google.script.run は アプリの あとから 用意される ことが あるので、
+   すぐには 判定せず、来るまで くりかえし たしかめる(最大5びょう)。 */
+function gasBoot(tries){
+  if (window.google && window.google.script && window.google.script.run){
+    GAS = true;
+    document.getElementById('sendBtn').style.display = '';
+    // iframeの中なので、URLの ?key= は google.script.url でしか よめない
+    try {
+      google.script.url.getLocation(loc => {
+        gasKey = (loc && loc.parameter && loc.parameter.key) || '';
+        gasWhoAmI();
+      });
+    } catch(e){ gasWhoAmI(); }
+    return;
+  }
+  if (tries > 0) setTimeout(() => gasBoot(tries - 1), 200);
 }
+gasBoot(25);
 function gasWhoAmI(){
   google.script.run
     .withSuccessHandler(w => {
